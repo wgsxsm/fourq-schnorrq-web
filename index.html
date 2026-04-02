@@ -52,7 +52,7 @@
     document.getElementById('genKey').onclick = () => {
       const skPtr = Module._malloc(32);
       const pkPtr = Module._malloc(32);
-      if (fullKeyGen(skPtr, pkPtr) === 0) {
+      if (fullKeyGen(skPtr, pkPtr) === 1) {
         currentSk = new Uint8Array(Module.HEAPU8.buffer, skPtr, 32);
         currentPk = new Uint8Array(Module.HEAPU8.buffer, pkPtr, 32);
         document.getElementById('keyOutput').innerHTML = `
@@ -76,7 +76,7 @@
       const pkPtr = Module._malloc(32); Module.HEAPU8.set(currentPk, pkPtr);
       const sigPtr = Module._malloc(64);
 
-      if (signFn(skPtr, pkPtr, msgPtr, msgBytes.length, sigPtr) === 0) {
+      if (signFn(skPtr, pkPtr, msgPtr, msgBytes.length, sigPtr) === 1) {
         currentSig = new Uint8Array(Module.HEAPU8.buffer, sigPtr, 64);
         document.getElementById('signOutput').innerHTML = `
 <b>签名成功！</b><br>
@@ -107,7 +107,7 @@
       const ret = verifyFn(pkPtr, msgPtr, msgBytes.length, sigPtr, validPtr);
       const valid = Module.getValue(validPtr, 'i32');
 
-      document.getElementById('verifyOutput').innerHTML = (ret === 0 && valid === 1) 
+      document.getElementById('verifyOutput').innerHTML = (ret === 1 && valid === 1) 
         ? '<span class="success">✅ 签名验证成功！（合法签名）</span>' 
         : '❌ 签名验证失败！';
 
