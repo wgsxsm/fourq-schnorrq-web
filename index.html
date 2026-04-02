@@ -2,120 +2,130 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>FourQ SchnorrQ 在线签名工具</title>
+  <title>FourQ SchnorrQ 签名工具</title>
   <style>
     body{font-family:system-ui;margin:40px auto;max-width:960px;line-height:1.6}
-    pre{background:#f4f4f4;padding:15px;border-radius:8px;overflow:auto}
-    button{margin:5px 5px 15px 0;padding:10px 20px;font-size:16px}
+    pre{background:#f4f4f4;padding:15px;border-radius:8px;overflow:auto;white-space:pre-wrap;word-break:break-all}
+    button{margin:5px 5px 15px 0;padding:10px 20px;font-size:16px;cursor:pointer}
+    button:disabled{opacity:0.5;cursor:not-allowed}
+    textarea,input[type=text]{font-family:monospace;font-size:14px}
     .success{color:#28a745;font-weight:bold}
+    .error{color:#dc3545;font-weight:bold}
+    .copy-btn{padding:5px 10px;font-size:12px}
   </style>
 </head>
 <body>
-  <h1>🔐 FourQ SchnorrQ 在线签名工具（官方 FourQlib）</h1>
-  <div id="status">正在加载 FourQ Wasm 模块...</div>
+  <h1>🔐 FourQ SchnorrQ 在线签名工具</h1>
+  <div id="status">正在加载...</div>
 
   <h2>1. 生成密钥对</h2>
-  <button id="genKey">生成新密钥对</button>
+  <button id="genKey" disabled>生成新密钥对</button>
   <pre id="keyOutput"></pre>
 
   <h2>2. 消息签名</h2>
-  <textarea id="message" rows="3" style="width:100%">0123456789ABCDEF</textarea><br>
-  <button id="signBtn">签名当前消息</button>
+  <textarea id="message" rows="3" style="width:100%">Hello FourQ</textarea><br>
+  <button id="signBtn" disabled>签名</button>
   <pre id="signOutput"></pre>
 
   <h2>3. 签名验证</h2>
-  <label>公钥 (64 hex): <input id="verifyPk" style="width:100%" placeholder="粘贴32字节公钥的十六进制"></label><br><br>
-  <label>消息: <textarea id="verifyMsg" rows="2" style="width:100%"></textarea></label><br>
-  <label>签名 (128 hex): <input id="verifySig" style="width:100%" placeholder="粘贴64字节签名的十六进制"></label><br><br>
-  <button id="verifyBtn">验证签名</button>
+  <label>公钥 (64 hex):<br><input id="verifyPk" type="text" style="width:100%"></label><br><br>
+  <label>消息:<br><textarea id="verifyMsg" rows="2" style="width:100%"></textarea></label><br>
+  <label>签名 (128 hex):<br><input id="verifySig" type="text" style="width:100%"></label><br><br>
+  <button id="verifyBtn" disabled>验证签名</button>
   <pre id="verifyOutput"></pre>
 
-  <script src="fourq.js"></script>
   <script>
     let Module, fullKeyGen, signFn, verifyFn;
-    let currentSk = null, currentPk = null, currentSig = null;
+    let sk = null, pk = null;
 
-    function bytesToHex(bytes) { return Array.from(bytes).map(b => b.toString(16).padStart(2,'0')).join(''); }
-    function hexToBytes(hex) {
-      return new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte,16)));
+    function toHex(b){return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join('')}
+    function fromHex(h){return new Uint8Array(h.match(/.{2}/g).map(x=>parseInt(x,16)))}
+    function copyText(t){navigator.clipboard.writeText(t).then(()=>alert('已复制'))}
+
+    async function load() {
+      const s = document.createElement('script');
+      s.src = 'fourq.js?' + Date.now();
+      document.body.appendChild(s);
+      
+      return new Promise((resolve, reject) => {
+        s.onload = () => typeof createFourQModule !== 'undefined' ? resolve() : reject('no module');
+        s.onerror = () => reject('load failed');
+        setTimeout(() => reject('timeout'), 10000);
+      });
     }
 
     async function init() {
-      Module = await createFourQModule();
-      fullKeyGen = Module.cwrap('wasm_FullKeyGeneration', 'number', ['number','number']);
-      signFn = Module.cwrap('wasm_Sign', 'number', ['number','number','number','number','number']);
-      verifyFn = Module.cwrap('wasm_Verify', 'number', ['number','number','number','number','number']);
-      document.getElementById('status').innerHTML = '✅ FourQ Wasm 模块加载成功！';
+      try {
+        await load();
+        Module = await createFourQModule();
+        fullKeyGen = Module.cwrap('wasm_FullKeyGeneration', 'number', ['number','number']);
+        signFn = Module.cwrap('wasm_Sign', 'number', ['number','number','number','number','number']);
+        verifyFn = Module.cwrap('wasm_Verify', 'number', ['number','number','number','number','number']);
+        
+        document.getElementById('status').innerHTML = '<span class="success">✅ 模块加载成功，可以使用</span>';
+        document.getElementById('genKey').disabled = false;
+        document.getElementById('signBtn').disabled = false;
+        document.getElementById('verifyBtn').disabled = false;
+      } catch(e) {
+        document.getElementById('status').innerHTML = '<span class="error">❌ 加载失败: ' + e + '</span>';
+      }
     }
 
-    // 生成密钥
     document.getElementById('genKey').onclick = () => {
-      const skPtr = Module._malloc(32);
-      const pkPtr = Module._malloc(32);
-      const result = fullKeyGen(skPtr, pkPtr);
-      console.log('KeyGen result:', result);  // 添加这行调试
-      if (result === 1) {
-        currentSk = new Uint8Array(Module.HEAPU8.buffer, skPtr, 32);
-        currentPk = new Uint8Array(Module.HEAPU8.buffer, pkPtr, 32);
-        document.getElementById('keyOutput').innerHTML = `
-<b>私钥 (32字节):</b> ${bytesToHex(currentSk)}<br>
-<b>公钥 (32字节):</b> ${bytesToHex(currentPk)}<br>
-<button onclick="navigator.clipboard.writeText('${bytesToHex(currentSk)}')">复制私钥</button>
-<button onclick="navigator.clipboard.writeText('${bytesToHex(currentPk)}')">复制公钥</button>`;
-      }else {
-    document.getElementById('keyOutput').textContent = '密钥生成失败，错误码: ' + result;
-  }
-      Module._free(skPtr); Module._free(pkPtr);
-    };
-
-    // 签名
-    document.getElementById('signBtn').onclick = () => {
-      if (!currentSk) return alert('请先点击“生成密钥对”');
-      const msg = document.getElementById('message').value;
-      const msgBytes = new TextEncoder().encode(msg);
-      const msgPtr = Module._malloc(msgBytes.length);
-      Module.HEAPU8.set(msgBytes, msgPtr);
-
-      const skPtr = Module._malloc(32); Module.HEAPU8.set(currentSk, skPtr);
-      const pkPtr = Module._malloc(32); Module.HEAPU8.set(currentPk, pkPtr);
-      const sigPtr = Module._malloc(64);
-
-      if (signFn(skPtr, pkPtr, msgPtr, msgBytes.length, sigPtr) === 1) {
-        currentSig = new Uint8Array(Module.HEAPU8.buffer, sigPtr, 64);
-        document.getElementById('signOutput').innerHTML = `
-<b>签名成功！</b><br>
-消息: "${msg}"<br>
-签名 (64字节): ${bytesToHex(currentSig)}<br>
-<button onclick="navigator.clipboard.writeText('${bytesToHex(currentSig)}')">复制签名</button>`;
+      const sp = Module._malloc(32), pp = Module._malloc(32);
+      if (fullKeyGen(sp, pp) === 1) {
+        sk = new Uint8Array(Module.HEAPU8.buffer.slice(sp, sp+32));
+        pk = new Uint8Array(Module.HEAPU8.buffer.slice(pp, pp+32));
+        document.getElementById('keyOutput').innerHTML =
+          '私钥: ' + toHex(sk) + ' <button class="copy-btn" onclick="copyText(\'' + toHex(sk) + '\')">复制</button>\n' +
+          '公钥: ' + toHex(pk) + ' <button class="copy-btn" onclick="copyText(\'' + toHex(pk) + '\')">复制</button>';
+      } else {
+        document.getElementById('keyOutput').textContent = '生成失败';
       }
-      Module._free(msgPtr); Module._free(skPtr); Module._free(pkPtr); Module._free(sigPtr);
+      Module._free(sp); Module._free(pp);
     };
 
-    // 验证
+    document.getElementById('signBtn').onclick = () => {
+      if (!sk) return alert('请先生成密钥对');
+      const msg = new TextEncoder().encode(document.getElementById('message').value);
+      const mp = Module._malloc(msg.length), sp2 = Module._malloc(32);
+      const pp = Module._malloc(32), sigp = Module._malloc(64);
+      Module.HEAPU8.set(msg, mp);
+      Module.HEAPU8.set(sk, sp2);
+      Module.HEAPU8.set(pk, pp);
+      
+      if (signFn(sp2, pp, mp, msg.length, sigp) === 1) {
+        const sig = new Uint8Array(Module.HEAPU8.buffer.slice(sigp, sigp+64));
+        document.getElementById('signOutput').innerHTML =
+          '<span class="success">签名成功！</span>\n' +
+          '消息: "' + document.getElementById('message').value + '"\n' +
+          '签名: ' + toHex(sig) + ' <button class="copy-btn" onclick="copyText(\'' + toHex(sig) + '\')">复制</button>';
+      } else {
+        document.getElementById('signOutput').textContent = '签名失败';
+      }
+      Module._free(mp); Module._free(sp2); Module._free(pp); Module._free(sigp);
+    };
+
     document.getElementById('verifyBtn').onclick = () => {
       const pkHex = document.getElementById('verifyPk').value.trim();
       const msg = document.getElementById('verifyMsg').value;
       const sigHex = document.getElementById('verifySig').value.trim();
-
-      if (pkHex.length !== 64 || sigHex.length !== 128) return alert('公钥或签名长度错误');
-
-      const pk = hexToBytes(pkHex);
-      const msgBytes = new TextEncoder().encode(msg);
-      const sig = hexToBytes(sigHex);
-
-      const pkPtr = Module._malloc(32); Module.HEAPU8.set(pk, pkPtr);
-      const msgPtr = Module._malloc(msgBytes.length); Module.HEAPU8.set(msgBytes, msgPtr);
-      const sigPtr = Module._malloc(64); Module.HEAPU8.set(sig, sigPtr);
-      const validPtr = Module._malloc(4);
-
-      const ret = verifyFn(pkPtr, msgPtr, msgBytes.length, sigPtr, validPtr);
-      const valid = Module.getValue(validPtr, 'i32');
-
-      document.getElementById('verifyOutput').innerHTML = (ret === 1 && valid === 1) 
-        ? '<span class="success">✅ 签名验证成功！（合法签名）</span>' 
-        : '❌ 签名验证失败！';
-
-      Module._free(pkPtr); Module._free(msgPtr); Module._free(sigPtr); Module._free(validPtr);
+      if (pkHex.length !== 64) return alert('公钥需要64个hex字符');
+      if (sigHex.length !== 128) return alert('签名需要128个hex字符');
+      
+      const pkBytes = fromHex(pkHex), msgBytes = new TextEncoder().encode(msg), sigBytes = fromHex(sigHex);
+      const pp = Module._malloc(32), mp = Module._malloc(msgBytes.length);
+      const sigp = Module._malloc(64), vp = Module._malloc(4);
+      Module.HEAPU8.set(pkBytes, pp);
+      Module.HEAPU8.set(msgBytes, mp);
+      Module.HEAPU8.set(sigBytes, sigp);
+      
+      const ret = verifyFn(pp, mp, msgBytes.length, sigp, vp);
+      const valid = Module.getValue(vp, 'i32');
+      document.getElementById('verifyOutput').innerHTML = (ret === 1 && valid === 1)
+        ? '<span class="success">✅ 签名验证通过！</span>'
+        : '<span class="error">❌ 签名验证失败</span>';
+      Module._free(pp); Module._free(mp); Module._free(sigp); Module._free(vp);
     };
 
     init();
