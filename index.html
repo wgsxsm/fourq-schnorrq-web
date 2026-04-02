@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>FourQ SchnorrQ 在线签名工具</title>
+  <style>
+    body{font-family:system-ui;margin:40px auto;max-width:960px;line-height:1.6}
+    pre{background:#f4f4f4;padding:15px;border-radius:8px;overflow:auto}
+    button{margin:5px 5px 15px 0;padding:10px 20px;font-size:16px}
+    .success{color:#28a745;font-weight:bold}
+  </style>
+</head>
+<body>
+  <h1>🔐 FourQ SchnorrQ 在线签名工具（官方 FourQlib）</h1>
+  <div id="status">正在加载 FourQ Wasm 模块...</div>
+
+  <h2>1. 生成密钥对</h2>
+  <button id="genKey">生成新密钥对</button>
+  <pre id="keyOutput"></pre>
+
+  <h2>2. 消息签名</h2>
+  <textarea id="message" rows="3" style="width:100%">0123456789ABCDEF</textarea><br>
+  <button id="signBtn">签名当前消息</button>
+  <pre id="signOutput"></pre>
+
+  <h2>3. 签名验证</h2>
+  <label>公钥 (64 hex): <input id="verifyPk" style="width:100%" placeholder="粘贴32字节公钥的十六进制"></label><br><br>
+  <label>消息: <textarea id="verifyMsg" rows="2" style="width:100%"></textarea></label><br>
+  <label>签名 (128 hex): <input id="verifySig" style="width:100%" placeholder="粘贴64字节签名的十六进制"></label><br><br>
+  <button id="verifyBtn">验证签名</button>
+  <pre id="verifyOutput"></pre>
+
+  <script src="fourq.js"></script>
+  <script>
+    let Module, fullKeyGen, signFn, verifyFn;
+    let currentSk = null, currentPk = null, currentSig = null;
+
+    function bytesToHex(bytes) { return Array.from(bytes).map(b => b.toString(16).padStart(2,'0')).join(''); }
+    function hexToBytes(hex) {
+      return new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte,16)));
+    }
+
+    async function init() {
+      Module = await createFourQModule();
+      fullKeyGen = Module.cwrap('wasm_FullKeyGeneration', 'number', ['number','number']);
+      signFn = Module.cwrap('wasm_Sign', 'number', ['number','number','number','number','number']);
+      verifyFn = Module.cwrap('wasm_Verify', 'number', ['number','number','number','number','number']);
+      document.getElementById('status').innerHTML = '✅ FourQ Wasm 模块加载成功！';
+    }
+
+    // 生成密钥
+    document.getElementById('genKey').onclick = () => {
+      const skPtr = Module._malloc(32);
+      const pkPtr = Module._malloc(32);
+      if (fullKeyGen(skPtr, pkPtr) === 0) {
+        currentSk = new Uint8Array(Module.HEAPU8.buffer, skPtr, 32);
+        currentPk = new Uint8Array(Module.HEAPU8.buffer, pkPtr, 32);
+        document.getElementById('keyOutput').innerHTML = `
+<b>私钥 (32字节):</b> ${bytesToHex(currentSk)}<br>
+<b>公钥 (32字节):</b> ${bytesToHex(currentPk)}<br>
+<button onclick="navigator.clipboard.writeText('${bytesToHex(currentSk)}')">复制私钥</button>
+<button onclick="navigator.clipboard.writeText('${bytesToHex(currentPk)}')">复制公钥</button>`;
+      }
+      Module._free(skPtr); Module._free(pkPtr);
+    };
+
+    // 签名
+    document.getElementById('signBtn').onclick = () => {
+      if (!currentSk) return alert('请先点击“生成密钥对”');
+      const msg = document.getElementById('message').value;
+      const msgBytes = new TextEncoder().encode(msg);
+      const msgPtr = Module._malloc(msgBytes.length);
+      Module.HEAPU8.set(msgBytes, msgPtr);
+
+      const skPtr = Module._malloc(32); Module.HEAPU8.set(currentSk, skPtr);
+      const pkPtr = Module._malloc(32); Module.HEAPU8.set(currentPk, pkPtr);
+      const sigPtr = Module._malloc(64);
+
+      if (signFn(skPtr, pkPtr, msgPtr, msgBytes.length, sigPtr) === 0) {
+        currentSig = new Uint8Array(Module.HEAPU8.buffer, sigPtr, 64);
+        document.getElementById('signOutput').innerHTML = `
+<b>签名成功！</b><br>
+消息: "${msg}"<br>
+签名 (64字节): ${bytesToHex(currentSig)}<br>
+<button onclick="navigator.clipboard.writeText('${bytesToHex(currentSig)}')">复制签名</button>`;
+      }
+      Module._free(msgPtr); Module._free(skPtr); Module._free(pkPtr); Module._free(sigPtr);
+    };
+
+    // 验证
+    document.getElementById('verifyBtn').onclick = () => {
+      const pkHex = document.getElementById('verifyPk').value.trim();
+      const msg = document.getElementById('verifyMsg').value;
+      const sigHex = document.getElementById('verifySig').value.trim();
+
+      if (pkHex.length !== 64 || sigHex.length !== 128) return alert('公钥或签名长度错误');
+
+      const pk = hexToBytes(pkHex);
+      const msgBytes = new TextEncoder().encode(msg);
+      const sig = hexToBytes(sigHex);
+
+      const pkPtr = Module._malloc(32); Module.HEAPU8.set(pk, pkPtr);
+      const msgPtr = Module._malloc(msgBytes.length); Module.HEAPU8.set(msgBytes, msgPtr);
+      const sigPtr = Module._malloc(64); Module.HEAPU8.set(sig, sigPtr);
+      const validPtr = Module._malloc(4);
+
+      const ret = verifyFn(pkPtr, msgPtr, msgBytes.length, sigPtr, validPtr);
+      const valid = Module.getValue(validPtr, 'i32');
+
+      document.getElementById('verifyOutput').innerHTML = (ret === 0 && valid === 1) 
+        ? '<span class="success">✅ 签名验证成功！（合法签名）</span>' 
+        : '❌ 签名验证失败！';
+
+      Module._free(pkPtr); Module._free(msgPtr); Module._free(sigPtr); Module._free(validPtr);
+    };
+
+    init();
+  </script>
+</body>
+</html>
