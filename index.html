@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FourQ SchnorrQ 在线签名工具</title>
+  <style>
+    :root {
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --success: #059669;
+      --danger: #dc2626;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #1e293b;
+      --text-secondary: #64748b;
+      --border: #e2e8f0;
+      --code-bg: #f1f5f9;
+      --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+      --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+      --radius: 12px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #a855f7 100%);
+      color: white;
+      padding: 48px 24px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .header::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
+      animation: pulse 8s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 0.5; }
+      50% { transform: scale(1.1); opacity: 0.8; }
+    }
+    .header h1 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      position: relative;
+      margin-bottom: 12px;
+    }
+    .header p {
+      font-size: 1.1rem;
+      opacity: 0.9;
+      position: relative;
+    }
+    .header .badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.2);
+      backdrop-filter: blur(10px);
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      margin-top: 16px;
+      position: relative;
+    }
+
+    /* Container */
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 32px 24px 64px;
+    }
+
+    /* Status bar */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 20px;
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      margin-bottom: 32px;
+      font-size: 0.95rem;
+      flex-wrap: wrap;
+    }
+    .status-left { display: flex; align-items: center; gap: 12px; }
+    .status-bar .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #fbbf24; flex-shrink: 0;
+    }
+    .status-bar.ready .dot { background: var(--success); }
+    .status-bar.error .dot { background: var(--danger); }
+    /* Hash toggle */
+    .hash-toggle { display: flex; align-items: center; gap: 8px; background: var(--code-bg); padding: 8px 16px; border-radius: 24px; font-size: 0.85rem; font-weight: 500; white-space: nowrap; }
+    .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; transition: .3s; border-radius: 24px; }
+    .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
+    input:checked + .slider { background-color: var(--primary); }
+    input:checked + .slider:before { transform: translateX(20px); }
+    .hash-label { min-width: 60px; text-align: center; color: var(--text-secondary); transition: color 0.3s; }
+    .hash-label.active { color: var(--primary); font-weight: 600; }
+
+    /* Spinner */
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Cards */
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 32px;
+      margin-bottom: 24px;
+      transition: box-shadow 0.2s;
+    }
+    .card:hover { box-shadow: var(--shadow-lg); }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .card-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      flex-shrink: 0;
+    }
+    .card-icon.key { background: #ede9fe; }
+    .card-icon.sign { background: #dbeafe; }
+    .card-icon.verify { background: #d1fae5; }
+
+    .card-header h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .card-header .step {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    /* Form elements */
+    label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    input[type="text"], textarea {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.9rem;
+      color: var(--text);
+      background: var(--code-bg);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    input[type="text"]:focus, textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+    }
+    textarea { resize: vertical; min-height: 80px; }
+
+    .input-group { margin-bottom: 20px; }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+    }
+    .btn-primary:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    /* Result blocks */
+    .result {
+      margin-top: 20px;
+      padding: 16px;
+      background: var(--code-bg);
+      border-radius: 8px;
+      border-left: 4px solid var(--primary);
+      display: none;
+    }
+    .result.show { display: block; }
+    .result.success { border-left-color: var(--success); }
+    .result.error { border-left-color: var(--danger); }
+
+    .result-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+    .result-value {
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.85rem;
+      word-break: break-all;
+      line-height: 1.7;
+      color: var(--text);
+    }
+
+    /* Copy button */
+    .copy-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+      margin-left: 8px;
+    }
+    .copy-btn:hover {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+    .copy-btn.copied {
+      background: var(--success);
+      color: white;
+      border-color: var(--success);
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--text);
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.3s;
+      z-index: 1000;
+      pointer-events: none;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Info section */
+    .info {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 32px;
+    }
+    .info h3 {
+      font-size: 1rem;
+      color: #1e40af;
+      margin-bottom: 8px;
+    }
+    .info p {
+      font-size: 0.875rem;
+      color: #3b82f6;
+      line-height: 1.7;
+    }
+    .info code {
+      background: rgba(59, 130, 246, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 32px 24px;
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+    }
+    .footer a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+    .footer a:hover { text-decoration: underline; }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .header h1 { font-size: 1.8rem; }
+      .card { padding: 20px; }
+      .container { padding: 20px 16px 48px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>🔐 FourQ SchnorrQ</h1>
+    <p>高性能椭圆曲线数字签名工具 · 纯浏览器端运行</p>
+    <div class="badge">基于 Microsoft FourQlib v3.1 · WebAssembly</div>
+  </div>
+
+  <div class="container">
+
+    <div class="status-bar" id="statusBar">
+      <div class="status-left">
+        <div class="spinner"></div>
+        <span id="statusText">正在加载 FourQ Wasm 模块...</span>
+      </div>
+      <div class="hash-toggle">
+        <span class="hash-label active" id="lblSha">SHA-512</span>
+        <label class="switch">
+          <input type="checkbox" id="hashToggle">
+          <span class="slider"></span>
+        </label>
+        <span class="hash-label" id="lblBlake">BLAKE2b</span>
+      </div>
+    </div>
+
+    <div class="info">
+      <h3>ℹ️ 关于 FourQ</h3>
+      <p>FourQ 是由微软研究院开发的高性能椭圆曲线，提供 128 位安全级别。SchnorrQ 是基于 FourQ 的 Schnorr 签名方案，具有签名短、验证快、安全性可证明等特点。所有计算均在您的浏览器本地完成，数据不会上传到任何服务器。</p>
+    </div>
+
+    <!-- 密钥生成 -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon key">🔑</div>
+        <div>
+          <div class="step">步骤 1</div>
+          <h2>生成密钥对</h2>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="genKey" disabled>
+        <span>🎲</span> 生成新密钥对
+      </button>
+      <div class="result" id="keyResult">
+        <div class="result-label">私钥 (Secret Key)</div>
+        <div class="result-value" id="skValue"></div>
+        <div class="result-label" style="margin-top:12px">公钥 (Public Key)</div>
+        <div class="result-value" id="pkValue"></div>
+      </div>
+    </div>
+
+    <!-- 签名 -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon sign">✍️</div>
+        <div>
+          <div class="step">步骤 2</div>
+          <h2>消息签名</h2>
+        </div>
+      </div>
+      <div class="input-group">
+        <label>待签名消息</label>
+        <textarea id="message" placeholder="输入需要签名的消息内容...">Hello FourQ!</textarea>
+      </div>
+      <button class="btn btn-primary" id="signBtn" disabled>
+        <span>🖊️</span> 生成签名
+      </button>
+      <div class="result" id="signResult">
+        <div class="result-label">签名结果 (Signature)</div>
+        <div class="result-value" id="sigValue"></div>
+      </div>
+    </div>
+
+    <!-- 验证 -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon verify">✅</div>
+        <div>
+          <div class="step">步骤 3</div>
+          <h2>签名验证</h2>
+        </div>
+      </div>
+      <div class="input-group">
+        <label>公钥 (64 位十六进制)</label>
+        <input type="text" id="verifyPk" placeholder="粘贴公钥 hex 字符串..." maxlength="64">
+      </div>
+      <div class="input-group">
+        <label>原始消息</label>
+        <textarea id="verifyMsg" rows="2" placeholder="输入原始消息内容..."></textarea>
+      </div>
+      <div class="input-group">
+        <label>签名 (128 位十六进制)</label>
+        <input type="text" id="verifySig" placeholder="粘贴签名 hex 字符串..." maxlength="128">
+      </div>
+      <button class="btn btn-primary" id="verifyBtn" disabled>
+        <span>🔍</span> 验证签名
+      </button>
+      <div class="result" id="verifyResult">
+        <div class="result-value" id="verifyValue"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <p>基于 <a href="https://github.com/Microsoft/FourQlib" target="_blank">Microsoft/FourQlib</a> · 纯浏览器端计算 · 数据零上传</p>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let Module, fullKeyGen, signFn, verifyFn, setHashAlgo;
+    let sk = null, pk = null;
+
+    const $ = id => document.getElementById(id);
+    const toHex = b => Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('');
+    const fromHex = h => new Uint8Array(h.match(/.{2}/g).map(x => parseInt(x, 16)));
+
+    function showToast(msg, duration = 2000) {
+      const t = $('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), duration);
+    }
+
+    function copyText(text, btn) {
+      navigator.clipboard.writeText(text).then(() => {
+        if (btn) {
+          btn.classList.add('copied');
+          btn.textContent = '✓ 已复制';
+          setTimeout(() => {
+            btn.classList.remove('copied');
+            btn.textContent = '📋 复制';
+          }, 1500);
+        } else {
+          showToast('✓ 已复制到剪贴板');
+        }
+      });
+    }
+
+    function showResult(id, html, type = '') {
+      const el = $(id);
+      el.innerHTML = html;
+      el.classList.add('show');
+      if (type) el.className = 'result show ' + type;
+    }
+
+    async function loadModule() {
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'fourq.js?' + Date.now();
+        s.onload = () => typeof createFourQModule !== 'undefined' ? resolve() : reject('模块未定义');
+        s.onerror = () => reject('加载失败');
+        document.body.appendChild(s);
+        setTimeout(() => reject('加载超时'), 15000);
+      });
+    }
+
+    async function init() {
+      try {
+        await loadModule();
+        Module = await createFourQModule();
+        fullKeyGen = Module.cwrap('wasm_FullKeyGeneration', 'number', ['number', 'number']);
+        signFn = Module.cwrap('wasm_Sign', 'number', ['number', 'number', 'number', 'number', 'number']);
+        verifyFn = Module.cwrap('wasm_Verify', 'number', ['number', 'number', 'number', 'number', 'number']);
+        setHashAlgo = Module.cwrap('set_hash_algo', null, ['number']);
+
+        $('statusBar').classList.add('ready');
+        $('statusBar').querySelector('.spinner').remove();
+        $('statusText').textContent = 'FourQ Wasm 模块已就绪，可以开始使用';
+        $('genKey').disabled = false;
+        $('signBtn').disabled = false;
+        $('verifyBtn').disabled = false;
+      } catch (e) {
+        $('statusBar').classList.add('error');
+        $('statusBar').querySelector('.spinner').remove();
+        $('statusText').textContent = '加载失败: ' + e.message;
+      }
+    }
+
+    // 哈希切换
+    $('hashToggle').addEventListener('change', function() {
+      const isBlake = this.checked;
+      $('lblSha').classList.toggle('active', !isBlake);
+      $('lblBlake').classList.toggle('active', isBlake);
+      if (setHashAlgo) setHashAlgo(isBlake ? 1 : 0);
+      showToast(isBlake ? '已切换至 BLAKE2b' : '已切换至 SHA-512', 1500);
+    });
+
+    // 生成密钥
+    $('genKey').onclick = () => {
+      const sp = Module._malloc(32), pp = Module._malloc(32);
+      if (fullKeyGen(sp, pp) === 1) {
+        sk = new Uint8Array(Module.HEAPU8.buffer.slice(sp, sp + 32));
+        pk = new Uint8Array(Module.HEAPU8.buffer.slice(pp, pp + 32));
+        const skHex = toHex(sk), pkHex = toHex(pk);
+        $('skValue').innerHTML = skHex + ' <button class="copy-btn" onclick="copyText(\'' + skHex + '\', this)">📋 复制</button>';
+        $('pkValue').innerHTML = pkHex + ' <button class="copy-btn" onclick="copyText(\'' + pkHex + '\', this)">📋 复制</button>';
+        showResult('keyResult', $('keyResult').innerHTML, 'success');
+        showToast('✓ 密钥对生成成功');
+      } else {
+        showResult('keyResult', '<span style="color:var(--danger)">密钥生成失败</span>', 'error');
+      }
+      Module._free(sp); Module._free(pp);
+    };
+
+    // 签名
+    $('signBtn').onclick = () => {
+      if (!sk) return showToast('⚠️ 请先生成密钥对', 2000);
+      const msg = new TextEncoder().encode($('message').value);
+      const mp = Module._malloc(msg.length), sp2 = Module._malloc(32);
+      const pp = Module._malloc(32), sigp = Module._malloc(64);
+      Module.HEAPU8.set(msg, mp);
+      Module.HEAPU8.set(sk, sp2);
+      Module.HEAPU8.set(pk, pp);
+
+      if (signFn(sp2, pp, mp, msg.length, sigp) === 1) {
+        const sig = new Uint8Array(Module.HEAPU8.buffer.slice(sigp, sigp + 64));
+        const sigHex = toHex(sig);
+        $('sigValue').innerHTML = sigHex + ' <button class="copy-btn" onclick="copyText(\'' + sigHex + '\', this)">📋 复制</button>';
+        showResult('signResult', $('signResult').innerHTML, 'success');
+        showToast('✓ 签名生成成功');
+      } else {
+        showResult('signResult', '<span style="color:var(--danger)">签名生成失败</span>', 'error');
+      }
+      Module._free(mp); Module._free(sp2); Module._free(pp); Module._free(sigp);
+    };
+
+    // 验证
+    $('verifyBtn').onclick = () => {
+      const pkHex = $('verifyPk').value.trim().replace(/\s/g, '');
+      const msg = $('verifyMsg').value;
+      const sigHex = $('verifySig').value.trim().replace(/\s/g, '');
+
+      if (pkHex.length !== 64) return showToast('⚠️ 公钥需要 64 个十六进制字符', 2500);
+      if (sigHex.length !== 128) return showToast('⚠️ 签名需要 128 个十六进制字符', 2500);
+
+      const pkBytes = fromHex(pkHex), msgBytes = new TextEncoder().encode(msg), sigBytes = fromHex(sigHex);
+      const pp = Module._malloc(32), mp = Module._malloc(msgBytes.length);
+      const sigp = Module._malloc(64), vp = Module._malloc(4);
+      Module.HEAPU8.set(pkBytes, pp);
+      Module.HEAPU8.set(msgBytes, mp);
+      Module.HEAPU8.set(sigBytes, sigp);
+
+      const ret = verifyFn(pp, mp, msgBytes.length, sigp, vp);
+      const valid = Module.getValue(vp, 'i32');
+
+      if (ret === 1 && valid === 1) {
+        showResult('verifyResult', '<span style="color:var(--success);font-weight:700;font-size:1.1rem">✅ 签名验证通过！</span><p style="margin-top:8px;font-size:0.9rem;color:var(--text-secondary)">该签名是合法有效的，消息未被篡改。</p>', 'success');
+        showToast('✓ 签名验证通过');
+      } else {
+        showResult('verifyResult', '<span style="color:var(--danger);font-weight:700;font-size:1.1rem">❌ 签名验证失败</span><p style="margin-top:8px;font-size:0.9rem;color:var(--text-secondary)">签名无效或消息已被篡改。</p>', 'error');
+        showToast('✗ 签名验证失败', 2500);
+      }
+      Module._free(pp); Module._free(mp); Module._free(sigp); Module._free(vp);
+    };
+
+    // 自动填充验证表单
+    $('verifyPk').addEventListener('input', function() {
+      this.value = this.value.replace(/[^0-9a-fA-F]/g, '').slice(0, 64);
+    });
+    $('verifySig').addEventListener('input', function() {
+      this.value = this.value.replace(/[^0-9a-fA-F]/g, '').slice(0, 128);
+    });
+
+    init();
+  </script>
+</body>
+</html>
