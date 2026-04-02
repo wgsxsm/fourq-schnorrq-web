@@ -52,7 +52,9 @@
     document.getElementById('genKey').onclick = () => {
       const skPtr = Module._malloc(32);
       const pkPtr = Module._malloc(32);
-      if (fullKeyGen(skPtr, pkPtr) === 1) {
+      const result = fullKeyGen(skPtr, pkPtr);
+      console.log('KeyGen result:', result);  // 添加这行调试
+      if (result === 1) {
         currentSk = new Uint8Array(Module.HEAPU8.buffer, skPtr, 32);
         currentPk = new Uint8Array(Module.HEAPU8.buffer, pkPtr, 32);
         document.getElementById('keyOutput').innerHTML = `
@@ -60,7 +62,9 @@
 <b>公钥 (32字节):</b> ${bytesToHex(currentPk)}<br>
 <button onclick="navigator.clipboard.writeText('${bytesToHex(currentSk)}')">复制私钥</button>
 <button onclick="navigator.clipboard.writeText('${bytesToHex(currentPk)}')">复制公钥</button>`;
-      }
+      }else {
+    document.getElementById('keyOutput').textContent = '密钥生成失败，错误码: ' + result;
+  }
       Module._free(skPtr); Module._free(pkPtr);
     };
 
